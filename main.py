@@ -16,7 +16,9 @@ index = 0
 api_hash = []
 client = None
 client_arr = []
-
+target_group = None
+target_group_entity = None
+g_index =0
 
 # api_id = '' # YOUR API_ID
 # api_hash = ''  # YOUR API_HASH
@@ -25,15 +27,38 @@ client_arr = []
 
 def init_tg_connect():
     global client
+    global target_group
+    global target_group_entity
+    global g_index
     if client_arr[index] is None:
         print("API ID 为空")
         return None
     client = client_arr[index]
-    # client = TelegramClient(api_hash[index]['phone'], api_hash[index]['api_id'], api_hash[index]['api_hash'])
-    # client.connect()
-    # if not client.is_user_authorized():
-    #     client.send_code_request(api_hash[index]['phone'])
-    #     client.sign_in(api_hash[index]['phone'], input('Enter the code: '))
+    chats = []
+    last_date = None
+    chunk_size = 10
+    groups = []
+    result = client(GetDialogsRequest(
+        offset_date=last_date,
+        offset_id=0,
+        offset_peer=InputPeerEmpty(),
+        limit=chunk_size,
+        hash=0
+    ))
+    chats.extend(result.chats)
+    for chat in chats:
+        try:
+            if chat.megagroup == True:  # CONDITION TO ONLY LIST MEGA GROUPS.
+                groups.append(chat)
+        except:
+            continue
+    i = 0
+    # for group in groups:
+    #     print(str(i) + '- ' + group.title)
+    #     i += 1
+    target_group = groups[int(g_index)]
+    target_group_entity = InputPeerChannel(target_group.id, target_group.access_hash)
+
 
 
 def read_api_hash_file():
@@ -56,6 +81,8 @@ def read_api_hash_file():
 
 def add_users_to_group():
     global index
+    global target_group_entity
+    global target_group
     input_file = sys.argv[1]
     users = []
     with open(input_file, encoding='UTF-8') as f:
@@ -102,16 +129,15 @@ def add_users_to_group():
     g_index = input("Enter a Number: ")
     target_group = groups[int(g_index)]
     print('\n\nGrupo elegido:\t' + groups[int(g_index)].title)
-
     target_group_entity = InputPeerChannel(target_group.id, target_group.access_hash)
-
     mode = int(input("输入 1 使用用户账号添加进Telegram 群组 输入 2 使用用户ID添加进入群组: "))
 
     error_count = 0
     n = 0
+    sl_index=0
     for user in users:
         try:
-            print("Adding {}".format(user['username']))
+            print("Adding {}-{}".format(user['username'],sl_index))
             if mode == 1:
                 if user['username'] == "":
                     continue
@@ -121,10 +147,16 @@ def add_users_to_group():
             else:
                 sys.exit("Invalid Mode Selected. Please Try Again.")
             client(InviteToChannelRequest(target_group_entity, [user_to_add]))
-            print("请等待60秒。。。正在运行中")
+            print("请等待10秒。。。正在运行中")
             del users[n]
             n += 1
-            time.sleep(60)
+            if sl_index==40:
+                sl_index=0
+                index+=1
+                init_tg_connect()
+            else:
+                sl_index+=1
+            time.sleep(10)
         except PeerFloodError:
             print("从Telegram中获取错误信息 脚本已停止 请过一段时间再次重试")
             index += 1
@@ -144,13 +176,15 @@ def add_users_to_group():
             if errmsg.find("FloodWaitError") != -1:
                 print("临时禁用")
                 index += 1
+                sl_index=0
                 init_tg_connect()
+                time.sleep(10)
                 continue
             print(errmsg)
             # print("Unexpected Error")
             error_count += 1
             if error_count > 250:
-                save_unprocessed(users)
+                # save_unprocessed(users)
                 sys.exit('too many errors')
             continue
 def list_users_in_group():
